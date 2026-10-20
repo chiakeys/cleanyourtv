@@ -85,6 +85,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private static final int LAUNCHER_SETTINGS_REQUEST = 42;
     /** Sent by QuickSettingsActivity: open Launcher settings from here so Home rebuilds when they close. */
     static final String ACTION_LAUNCHER_SETTINGS = "com.gathin.tvhome.action.LAUNCHER_SETTINGS";
+    /** Fallback source picker for remotes when the OEM/Google VIEW_INPUTS activity is disabled. */
+    static final String ACTION_SHOW_INPUTS = "com.gathin.tvhome.action.SHOW_INPUTS";
     /** Tiles per row and dock slots (res/values/config.xml, columns). Set in onCreate. */
     static int COLUMNS = 4;
     private boolean rtlAppGrid;
@@ -110,6 +112,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean advancedEffects;
     private TextView greeting;
     private View btnInputs;
+    /** Open our HDMI selector when the input accessibility service brings Home to the foreground. */
+    private boolean pendingShowInputs;
     private TextView btnWifi;
     private TextView shamsiDate;
     private TextView stats;
@@ -494,7 +498,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     .build(), vpnCallback);
         }
         // Not after recreate(): the launch intent survives it and would open the settings again.
-        if (savedInstanceState == null) openLauncherSettingsIfAsked(getIntent());
+        if (savedInstanceState == null) {
+            if (getIntent() != null && ACTION_SHOW_INPUTS.equals(getIntent().getAction())) {
+                pendingShowInputs = true;
+                setIntent(new Intent(Intent.ACTION_MAIN));
+            } else {
+                openLauncherSettingsIfAsked(getIntent());
+            }
+        }
     }
 
     private boolean openLauncherSettingsIfAsked(Intent intent) {
@@ -513,6 +524,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if (openLauncherSettingsIfAsked(intent)) return;
+        if (intent != null && ACTION_SHOW_INPUTS.equals(intent.getAction())) {
+            pendingShowInputs = true;
+            // Do not repeat the popup when Android recreates or resumes the Home activity.
+            setIntent(new Intent(Intent.ACTION_MAIN));
+            showPendingInputs();
+            return;
+        }
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
         grid.scrollToPosition(0);
         lastFocused = 0;
@@ -663,10 +681,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         rebuildOnResume = true;
     }
 
+    /** Wait for Home to gain focus and its Inputs pill to be laid out before displaying the popup. */
+    private void showPendingInputs() {
+        if (!pendingShowInputs || !hasWindowFocus() || btnInputs == null) return;
+        btnInputs.post(() -> {
+            if (!pendingShowInputs || !hasWindowFocus()) return;
+            pendingShowInputs = false;
+            showInputs();
+        });
+    }
+
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
+            showPendingInputs();
             if (libraryFocusPending && appLibrary == null) focusLibrary();
             showCardPrompt();
         }
