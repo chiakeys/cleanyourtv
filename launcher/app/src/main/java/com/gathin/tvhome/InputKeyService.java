@@ -48,7 +48,14 @@ public class InputKeyService extends AccessibilityService {
             } else {
                 try {
                     startActivity(new Intent(ACTION_VIEW_INPUTS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                } catch (ActivityNotFoundException ignored) {
+                } catch (ActivityNotFoundException | SecurityException unavailable) {
+                    // The stock Android TV launcher often owns VIEW_INPUTS as well as HOME.
+                    // With it disabled, open our existing HDMI/AV/tuner popup instead.
+                    startActivity(new Intent(this, MainActivity.class)
+                            .setAction(MainActivity.ACTION_SHOW_INPUTS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                    | Intent.FLAG_ACTIVITY_SINGLE_TOP));
                 }
             }
         }
